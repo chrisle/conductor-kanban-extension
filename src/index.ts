@@ -1,24 +1,28 @@
 import { SquareKanban } from 'lucide-react'
 import type { Extension } from '@conductor/extension-sdk'
-import JiraSidebar from './JiraSidebar'
-import JiraBoardTab from './JiraBoardTab'
-import JiraConfigPanel from './JiraConfigPanel'
+import Sidebar from './Sidebar'
+import BoardTab from './BoardTab'
+import ConfigPanel from './ConfigPanel'
 import startWorkSkill from './skills/start-work/SKILL.md'
 
-const jiraExtension: Extension = {
-  id: 'jira',
-  name: 'Jira',
-  description: 'Browse and manage Jira boards and issues',
-  version: '1.0.0',
+// Register providers
+import './providers/jira/jira-provider'
+import './providers/gitea/gitea-provider'
+
+const kanbanExtension: Extension = {
+  id: 'kanban',
+  name: 'Kanban',
+  description: 'Browse and manage project boards and issues from Jira, Gitea, and more',
+  version: '2.0.0',
   icon: SquareKanban,
-  sidebar: JiraSidebar,
-  configPanel: JiraConfigPanel,
+  sidebar: Sidebar,
+  configPanel: ConfigPanel,
   tabs: [
     {
-      type: 'jira-board',
-      label: 'Jira Board',
+      type: 'kanban-board',
+      label: 'Board',
       icon: SquareKanban,
-      component: JiraBoardTab,
+      component: BoardTab,
     },
   ],
   skills: [
@@ -26,29 +30,10 @@ const jiraExtension: Extension = {
   ],
 }
 
-// Re-export public API for consumers
-export {
-  loadConfig,
-  saveConfig,
-  clearConfig,
-  issueUrl,
-  projectBoardUrl,
-  fetchProjects,
-  fetchTickets,
-  fetchEpics,
-  fetchDevelopmentInfo,
-  fetchIssueTypes,
-  createJiraTicket,
-  updateTicket,
-  transitionTicket,
-  isDemoMode,
-  enableDemoMode,
-  disableDemoMode,
-  loadDemoBoardData,
-  DEMO_PROJECT_KEY,
-  DEMO_PROJECT_NAME,
-  DEMO_CONFIG,
-} from './jira-api'
-export { jiraExtension }
-export default jiraExtension
-export type { JiraConfig, JiraProject, Ticket, Epic, TicketStatus, PullRequest, UpdateTicketParams } from './jira-api'
+export { kanbanExtension }
+export default kanbanExtension
+export { providerRegistry } from './providers/provider'
+export type {
+  Ticket, Epic, PullRequest, TicketStatus, UpdateTicketParams,
+  CreateTicketParams, Project, ProviderConnection, ProviderType,
+} from './types'

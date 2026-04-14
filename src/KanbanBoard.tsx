@@ -3,7 +3,8 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { ui, type ThinkingState } from '@conductor/extension-api'
 import { KanbanColumn } from './KanbanColumn'
 import type { PendingTicket } from './KanbanColumn'
-import type { Ticket, Epic, TicketStatus, JiraConfig } from './jira-api'
+import type { Ticket, Epic, TicketStatus, ProviderConnection } from './types'
+import type { Provider } from './providers/provider'
 
 const { Collapsible, CollapsibleTrigger, CollapsibleContent, Badge } = ui
 
@@ -26,8 +27,8 @@ const COLUMNS: { title: string; status: TicketStatus }[] = [
 interface KanbanBoardProps {
   tickets: Ticket[]
   epics: Epic[]
-  config: JiraConfig
-  jiraBaseUrl: string
+  connection: ProviderConnection
+  provider: Provider
   pendingTickets?: PendingTicket[]
   startingTickets?: Set<string>
   sessionThinking: Record<string, ThinkingState>
@@ -47,7 +48,7 @@ interface KanbanBoardProps {
   workSessions?: WorkSession[]
 }
 
-export function KanbanBoard({ tickets, epics, config, jiraBaseUrl, pendingTickets = [], startingTickets, sessionThinking, hideDoneColumn = false, onOpenUrl, onNewSession, onContinueSession, onStartWork, onStartWorkInBackground, onEditTicket, onOpenInTerminal, onOpenInVSCode, onOpenInClaude, onRefresh, onCreateTicket, onInlineCreate, workSessions = [] }: KanbanBoardProps) {
+export function KanbanBoard({ tickets, epics, connection, provider, pendingTickets = [], startingTickets, sessionThinking, hideDoneColumn = false, onOpenUrl, onNewSession, onContinueSession, onStartWork, onStartWorkInBackground, onEditTicket, onOpenInTerminal, onOpenInVSCode, onOpenInClaude, onRefresh, onCreateTicket, onInlineCreate, workSessions = [] }: KanbanBoardProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
   // Filter out the done column when the user has chosen to hide it
@@ -65,7 +66,7 @@ export function KanbanBoard({ tickets, epics, config, jiraBaseUrl, pendingTicket
     })
   }
 
-  const columnProps = { config, jiraBaseUrl, startingTickets, sessionThinking, onOpenUrl, onNewSession, onContinueSession, onStartWork, onStartWorkInBackground, onEditTicket, onOpenInTerminal, onOpenInVSCode, onOpenInClaude, onRefresh, workSessions }
+  const columnProps = { connection, provider, startingTickets, sessionThinking, onOpenUrl, onNewSession, onContinueSession, onStartWork, onStartWorkInBackground, onEditTicket, onOpenInTerminal, onOpenInVSCode, onOpenInClaude, onRefresh, workSessions }
 
   return (
     <div className="h-full overflow-auto p-4 space-y-4 min-w-0">

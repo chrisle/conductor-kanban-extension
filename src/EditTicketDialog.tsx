@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ui } from '@conductor/extension-api'
-import type { Ticket, UpdateTicketParams } from './jira-api'
+import type { Ticket, UpdateTicketParams } from './types'
 
 const {
   Button, Dialog, DialogContent, DialogHeader,

@@ -2,7 +2,8 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { ArrowUpDown, Plus, Minimize2, Maximize2 } from 'lucide-react'
 import { useConfigStore, ui, type ThinkingState } from '@conductor/extension-api'
 import { TicketCard } from './TicketCard'
-import type { Ticket, TicketStatus, JiraConfig } from './jira-api'
+import type { Ticket, TicketStatus, ProviderConnection } from './types'
+import type { Provider } from './providers/provider'
 
 const {
   Badge, Skeleton, DropdownMenu, DropdownMenuTrigger,
@@ -32,8 +33,8 @@ interface KanbanColumnProps {
   tickets: Ticket[]
   pendingTickets?: PendingTicket[]
   startingTickets?: Set<string>
-  config: JiraConfig
-  jiraBaseUrl: string
+  connection: ProviderConnection
+  provider: Provider
   sessionThinking: Record<string, ThinkingState>
   onOpenUrl: (url: string, title: string) => void
   onNewSession: (ticket: Ticket) => void
@@ -79,7 +80,7 @@ function saveCompactColumns(set: Set<string>) {
   useConfigStore.getState().setKanbanCompactColumns([...set])
 }
 
-export function KanbanColumn({ title, status, tickets, pendingTickets = [], startingTickets, config, jiraBaseUrl, sessionThinking, onOpenUrl, onNewSession, onContinueSession, onStartWork, onStartWorkInBackground, onEditTicket, onOpenInTerminal, onOpenInVSCode, onOpenInClaude, onRefresh, onCreateTicket, onInlineCreate, workSessions = [] }: KanbanColumnProps) {
+export function KanbanColumn({ title, status, tickets, pendingTickets = [], startingTickets, connection, provider, sessionThinking, onOpenUrl, onNewSession, onContinueSession, onStartWork, onStartWorkInBackground, onEditTicket, onOpenInTerminal, onOpenInVSCode, onOpenInClaude, onRefresh, onCreateTicket, onInlineCreate, workSessions = [] }: KanbanColumnProps) {
   const [sort, setSort] = useState<SortMode>('none')
   const [compact, setCompact] = useState(() => getCompactColumns().has(status))
   const [inlineCreating, setInlineCreating] = useState(false)
@@ -185,9 +186,9 @@ export function KanbanColumn({ title, status, tickets, pendingTickets = [], star
             const isMerged = ticket.pullRequests[0]?.status === 'MERGED'
             return (
               <div key={ticket.key} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-jira-raised/50">
-                <LinkContextMenu url={`${jiraBaseUrl}/browse/${ticket.key}`} title={ticket.key} openInAppLabel="Go to Kanban Board" openExternalLabel="Open Jira">
+                <LinkContextMenu url={provider.issueUrl(connection, ticket.key)} title={ticket.key} openInAppLabel="Go to Kanban Board" openExternalLabel="Open in Provider">
                   <button
-                    onClick={() => onOpenUrl(`${jiraBaseUrl}/browse/${ticket.key}`, ticket.key)}
+                    onClick={() => onOpenUrl(provider.issueUrl(connection, ticket.key), ticket.key)}
                     className="shrink-0 text-xs font-medium text-zinc-400 hover:text-blue-400"
                   >
                     {ticket.key}
@@ -218,8 +219,8 @@ export function KanbanColumn({ title, status, tickets, pendingTickets = [], star
               <TicketCard
                 key={ticket.key}
                 ticket={ticket}
-                config={config}
-                jiraBaseUrl={jiraBaseUrl}
+                connection={connection}
+                provider={provider}
                 isThinking={sessionThinking[`t-${ticket.key}`]?.thinking ?? false}
                 isStarting={startingTickets?.has(ticket.key) ?? false}
                 workSession={workSessions.find(s => s.ticketKey === ticket.key && s.status !== 'completed')}

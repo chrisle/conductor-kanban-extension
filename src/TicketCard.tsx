@@ -8,8 +8,8 @@ import {
 import { useWorkSessionsStore, ui } from '@conductor/extension-api'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { Ticket, JiraConfig } from './jira-api'
-import { transitionTicket, updateTicket, deleteTicket } from './jira-api'
+import type { Ticket, ProviderConnection } from './types'
+import type { Provider } from './providers/provider'
 
 const {
   ClaudeIcon, Badge,
@@ -32,8 +32,8 @@ interface WorkSession {
 
 interface TicketCardProps {
   ticket: Ticket
-  config: JiraConfig
-  jiraBaseUrl: string
+  connection: ProviderConnection
+  provider: Provider
   isThinking: boolean
   isStarting: boolean
   workSession?: WorkSession
@@ -97,8 +97,8 @@ function IssueTypeIcon({ type }: { type: string }) {
 
 export const TicketCard = memo(function TicketCard({
   ticket,
-  config,
-  jiraBaseUrl,
+  connection,
+  provider,
   isThinking,
   isStarting,
   workSession,
@@ -153,7 +153,7 @@ export const TicketCard = memo(function TicketCard({
     }
     setEditing(false)
     try {
-      await updateTicket(config, ticket.key, { summary: trimmed })
+      await provider.updateTicket(connection, ticket.key, { summary: trimmed })
       onRefresh()
     } catch (err) {
       console.error('Failed to update summary:', err)
@@ -174,7 +174,7 @@ export const TicketCard = memo(function TicketCard({
   const handleTransition = async (status: string) => {
     setJiraLoading(true)
     try {
-      await transitionTicket(config, ticket.key, status)
+      await provider.transitionTicket(connection, ticket.key, status)
       if (status === 'Done' && workSession) {
         await useWorkSessionsStore.getState().completeSession(workSession.id)
       }
@@ -277,24 +277,26 @@ export const TicketCard = memo(function TicketCard({
 
                 <DropdownMenuSeparator className="bg-zinc-700" />
 
-                <DropdownMenuItem
-                  className="gap-2 text-xs cursor-pointer text-red-400 focus:text-red-300"
-                  disabled={jiraLoading}
-                  onSelect={async () => {
-                    setJiraLoading(true)
-                    try {
-                      await deleteTicket(config, ticket.key)
-                      onRefresh()
-                    } catch (err) {
-                      console.error('Failed to delete ticket:', err)
-                    } finally {
-                      setJiraLoading(false)
-                    }
-                  }}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete ticket
-                </DropdownMenuItem>
+                {provider.supportsDelete && (
+                  <DropdownMenuItem
+                    className="gap-2 text-xs cursor-pointer text-red-400 focus:text-red-300"
+                    disabled={jiraLoading}
+                    onSelect={async () => {
+                      setJiraLoading(true)
+                      try {
+                        await provider.deleteTicket(connection, ticket.key)
+                        onRefresh()
+                      } catch (err) {
+                        console.error('Failed to delete ticket:', err)
+                      } finally {
+                        setJiraLoading(false)
+                      }
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete ticket
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -330,9 +332,9 @@ export const TicketCard = memo(function TicketCard({
             <div className="flex items-center gap-1.5">
               <IssueTypeIcon type={issueTypeLower} />
 
-              <LinkContextMenu url={`${jiraBaseUrl}/browse/${ticket.key}`} title={ticket.key} openInAppLabel="Go to Kanban Board" openExternalLabel="Open Jira">
+              <LinkContextMenu url={provider.issueUrl(connection, ticket.key)} title={ticket.key} openInAppLabel="Go to Kanban Board" openExternalLabel={`Open in ${provider.displayName}`}>
                 <button
-                  onClick={() => onOpenUrl(`${jiraBaseUrl}/browse/${ticket.key}`, ticket.key)}
+                  onClick={() => onOpenUrl(provider.issueUrl(connection, ticket.key), ticket.key)}
                   className="shrink-0 text-xs font-medium text-zinc-400 hover:text-blue-400 transition-colors"
                 >
                   {ticket.key}
@@ -476,9 +478,9 @@ export const TicketCard = memo(function TicketCard({
 
         <ContextMenuSeparator className="bg-zinc-700" />
 
-        <ContextMenuItem className="gap-2 text-xs cursor-pointer" onSelect={() => onOpenUrl(`${jiraBaseUrl}/browse/${ticket.key}`, ticket.key)}>
+        <ContextMenuItem className="gap-2 text-xs cursor-pointer" onSelect={() => onOpenUrl(provider.issueUrl(connection, ticket.key), ticket.key)}>
           <ExternalLink className="w-3.5 h-3.5" />
-          Open in Jira
+          Open in {provider.displayName}
         </ContextMenuItem>
         {ticket.pullRequests.filter(pr => pr.status === 'OPEN').map((pr) => (
           <ContextMenuItem key={pr.id} className="gap-2 text-xs cursor-pointer" onSelect={() => onOpenUrl(pr.url, pr.name)}>
@@ -489,20 +491,22 @@ export const TicketCard = memo(function TicketCard({
 
         <ContextMenuSeparator className="bg-zinc-700" />
 
-        <ContextMenuItem
-          className="gap-2 text-xs cursor-pointer text-red-400 focus:text-red-300"
-          onSelect={async () => {
-            try {
-              await deleteTicket(config, ticket.key)
-              onRefresh()
-            } catch (err) {
-              console.error('Failed to delete ticket:', err)
-            }
-          }}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-          Delete ticket
-        </ContextMenuItem>
+        {provider.supportsDelete && (
+          <ContextMenuItem
+            className="gap-2 text-xs cursor-pointer text-red-400 focus:text-red-300"
+            onSelect={async () => {
+              try {
+                await provider.deleteTicket(connection, ticket.key)
+                onRefresh()
+              } catch (err) {
+                console.error('Failed to delete ticket:', err)
+              }
+            }}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete ticket
+          </ContextMenuItem>
+        )}
       </ContextMenuContent>
 
       {/* Description dialog */}

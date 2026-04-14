@@ -10,41 +10,39 @@ import { KanbanBoard } from "./KanbanBoard";
 import { CreateTicketDialog } from "./CreateTicketDialog";
 import { EditTicketDialog } from "./EditTicketDialog";
 import type { PendingTicket } from "./KanbanColumn";
-import type { TicketStatus, UpdateTicketParams } from "./jira-api";
+import type { Ticket, Epic, TicketStatus, ProviderConnection, UpdateTicketParams } from "./types";
+import type { Provider } from "./providers/provider";
+import { providerRegistry } from "./providers/provider";
 import { useSessionThinking } from "./useSessionThinking";
 
 const { Button } = ui;
-import {
-  loadConfig,
-  fetchTickets,
-  fetchEpics,
-  fetchDevelopmentInfo,
-  createJiraTicket,
-  updateTicket,
-  transitionTicket,
-  isDemoMode,
-  loadDemoBoardData,
-  DEMO_CONFIG,
-  type Ticket,
-  type Epic,
-  type JiraConfig,
-} from "./jira-api";
+
+// Demo mode (provider-agnostic wrapper)
+import { isDemoMode, loadDemoBoardData, DEMO_CONFIG } from "./demo";
 
 // Persistent cache so the board renders instantly on app restart (file-based via IPC)
 let _boardCachePromise: Map<string, Promise<{ tickets: Ticket[]; epics: Epic[] } | null>> = new Map()
 
 function loadBoardCache(projectKey: string): Promise<{ tickets: Ticket[]; epics: Epic[] } | null> {
   if (!_boardCachePromise.has(projectKey)) {
-    _boardCachePromise.set(projectKey, window.electronAPI.loadCache('jira', projectKey))
+    _boardCachePromise.set(projectKey, window.electronAPI.loadCache('kanban', projectKey))
   }
   return _boardCachePromise.get(projectKey)!
 }
 
 function saveBoardCache(projectKey: string, tickets: Ticket[], epics: Epic[]) {
-  window.electronAPI.saveCache('jira', projectKey, { tickets, epics })
+  window.electronAPI.saveCache('kanban', projectKey, { tickets, epics })
 }
 
-export default function JiraBoardTab({
+/** Extract a domain/URL string from a provider connection for use in skill args */
+function getDomain(connection: ProviderConnection | null): string {
+  if (!connection) return ''
+  if (connection.providerType === 'jira') return connection.domain
+  if (connection.providerType === 'gitea') return connection.baseUrl
+  return ''
+}
+
+export default function BoardTab({
   tabId,
   groupId,
   isActive,
@@ -52,13 +50,17 @@ export default function JiraBoardTab({
 }: TabProps): React.ReactElement {
   const projectKey = tab.content || tab.title?.replace(/ Board$/, "").replace(/ Kanban Board$/, "") || "";
   const boardName = tab.title || `${projectKey} Kanban Board`;
-  const [config, setConfig] = useState<JiraConfig | null>(() => isDemoMode() ? DEMO_CONFIG : loadConfig());
+  const [connection, setConnection] = useState<ProviderConnection | null>(() =>
+    isDemoMode() ? DEMO_CONFIG : useConfigStore.getState().getActiveConnection()
+  );
 
-  // If config wasn't available at mount (store still loading), pick it up once ready
+  const provider: Provider | null = connection ? providerRegistry.getForConnection(connection) : null;
+
+  // If connection wasn't available at mount (store still loading), pick it up once ready
   const configReady = useConfigStore(s => s.ready);
   useEffect(() => {
-    if (configReady && !config) {
-      setConfig(isDemoMode() ? DEMO_CONFIG : loadConfig());
+    if (configReady && !connection) {
+      setConnection(isDemoMode() ? DEMO_CONFIG : useConfigStore.getState().getActiveConnection());
     }
   }, [configReady]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -74,7 +76,8 @@ export default function JiraBoardTab({
     .map(ws => ws.tmuxSessionId!);
   const sessionThinking = useSessionThinking(activeSessionNames);
   const [liveUpdate, setLiveUpdate] = useState(true);
-  const liveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollIntervalRef = useRef(30);
   const lastBoardFpRef = useRef('');
   const [pendingTickets, setPendingTickets] = useState<PendingTicket[]>([]);
   const [startingTickets, setStartingTickets] = useState<Set<string>>(new Set());
@@ -116,25 +119,26 @@ export default function JiraBoardTab({
     } catch { /* conductord not running */ }
   }, [])
 
-  const loadData = useCallback(async (silent = false) => {
-    if (!projectKey) return;
+  /** Returns whether data changed (true) or was unchanged/errored (false). */
+  const loadData = useCallback(async (silent = false): Promise<boolean> => {
+    if (!projectKey) return false;
 
     // Demo mode: load from external data files
     if (isDemoMode()) {
       const demo = await loadDemoBoardData();
       setTickets(demo.tickets);
       setEpics(demo.epics);
-      return;
+      return true;
     }
 
-    if (!config) return;
+    if (!connection || !provider) return false;
 
     if (!silent) setLoading(true);
     setError("");
     try {
       const [ticketData, epicData] = await Promise.all([
-        fetchTickets(config, projectKey),
-        fetchEpics(config, projectKey),
+        provider.fetchTickets(connection, projectKey),
+        provider.fetchEpics(connection, projectKey),
       ]);
 
       const epicMap = new Map(epicData.map((e) => [e.key, e]));
@@ -148,7 +152,7 @@ export default function JiraBoardTab({
       );
       const prResults = await Promise.all(
         activeTickets.map(async (t) => {
-          const prs = await fetchDevelopmentInfo(config, t.key);
+          const prs = await provider.fetchDevelopmentInfo(connection, t.key);
           return { key: t.key, prs };
         }),
       );
@@ -168,18 +172,21 @@ export default function JiraBoardTab({
       // Always update cache with latest data (cheap disk write)
       saveBoardCache(projectKey, ticketData, epicData);
 
-      if (fp !== lastBoardFpRef.current) {
+      const changed = fp !== lastBoardFpRef.current;
+      if (changed) {
         lastBoardFpRef.current = fp;
         setTickets(ticketData);
         setEpics(epicData);
       }
       reconcileSessions();
+      return changed;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
+      return false;
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [config, projectKey]);
+  }, [connection, provider, projectKey]);
 
   // Load cached board data for instant render, then fetch fresh data
   const cacheAppliedRef = useRef(false);
@@ -189,7 +196,7 @@ export default function JiraBoardTab({
       loadData();
       return;
     }
-    if (!config) return;
+    if (!connection) return;
     // Show cache instantly, but only before the first fresh fetch completes
     if (!cacheAppliedRef.current) {
       cacheAppliedRef.current = true;
@@ -201,7 +208,7 @@ export default function JiraBoardTab({
       });
     }
     loadData();
-  }, [config, projectKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [connection, projectKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cmd+F focuses the filter input when this tab is active
   useEffect(() => {
@@ -217,30 +224,38 @@ export default function JiraBoardTab({
     return () => window.removeEventListener('keydown', handler)
   }, [isActive])
 
-  // Live polling — refresh every 30s when enabled and tab is active
-  const POLL_INTERVAL = 30
+  // Live polling — starts at 30s, backs off to 5min when data is unchanged
+  const BASE_POLL_INTERVAL = 30
+  const MAX_POLL_INTERVAL = 300
   useEffect(() => {
-    if (!liveUpdate || !isActive || !config || !projectKey) {
-      if (liveIntervalRef.current) {
-        clearInterval(liveIntervalRef.current)
-        liveIntervalRef.current = null
+    if (!liveUpdate || !isActive || !connection || !projectKey) {
+      if (liveTimerRef.current) {
+        clearTimeout(liveTimerRef.current)
+        liveTimerRef.current = null
       }
+      pollIntervalRef.current = BASE_POLL_INTERVAL
       return
     }
-    liveIntervalRef.current = setInterval(() => {
-      loadData(true)
-    }, POLL_INTERVAL * 1000)
+    function schedulePoll() {
+      liveTimerRef.current = setTimeout(async () => {
+        const changed = await loadData(true)
+        if (changed) {
+          pollIntervalRef.current = BASE_POLL_INTERVAL
+        } else {
+          pollIntervalRef.current = Math.min(pollIntervalRef.current * 2, MAX_POLL_INTERVAL)
+        }
+        schedulePoll()
+      }, pollIntervalRef.current * 1000)
+    }
+    pollIntervalRef.current = BASE_POLL_INTERVAL
+    schedulePoll()
     return () => {
-      if (liveIntervalRef.current) {
-        clearInterval(liveIntervalRef.current)
-        liveIntervalRef.current = null
+      if (liveTimerRef.current) {
+        clearTimeout(liveTimerRef.current)
+        liveTimerRef.current = null
       }
     }
-  }, [liveUpdate, isActive, config, projectKey, loadData])
-
-  const jiraBaseUrl = config
-    ? `https://${config.domain.replace(/\.atlassian\.net$/, "")}.atlassian.net`
-    : "";
+  }, [liveUpdate, isActive, connection, projectKey, loadData])
 
   function openUrl(url: string, title: string) {
     const targetGroup = focusedGroupId || groupId;
@@ -275,7 +290,7 @@ export default function JiraBoardTab({
           await sessionsStore.createSession({
             projectPath: useProjectStore.getState().filePath || '',
             ticketKey: ticket.key,
-            jiraConnectionId: '',
+            providerConnectionId: '',
             worktree,
             tmuxSessionId: tmuxSessionName(ticket.key),
             claudeSessionId: null,
@@ -297,7 +312,7 @@ export default function JiraBoardTab({
           await sessionsStore.createSession({
             projectPath: useProjectStore.getState().filePath || '',
             ticketKey: ticket.key,
-            jiraConnectionId: '',
+            providerConnectionId: '',
             worktree,
             tmuxSessionId: tmuxSessionName(ticket.key),
             claudeSessionId: null,
@@ -369,9 +384,9 @@ export default function JiraBoardTab({
       return;
     }
 
-    // Invoke the /conductor-jira-start-work skill with ticket details as arguments
+    // Invoke the /conductor-start-work skill with ticket details as arguments
     const claudeSettings = useConfigStore.getState().config.aiCli.claudeCode
-    const skillArgs = `/conductor-jira-start-work ${ticket.key} ${projectKey} ${config?.domain ?? ''}`
+    const skillArgs = `/conductor-start-work ${ticket.key} ${projectKey} ${connection?.providerType ?? ''} ${getDomain(connection)}`
     const escaped = skillArgs.replace(/'/g, "'\\''")
     const initialCommand = buildClaudeCommand(`claude '${escaped}'\n`, claudeSettings);
 
@@ -409,14 +424,14 @@ export default function JiraBoardTab({
 
     setStartingTickets(prev => { const next = new Set(prev); next.delete(ticket.key); return next });
     setTimeout(reconcileSessions, 1500);
-    // Auto-transition ticket to "In Progress" in Jira (skip in demo mode)
-    if (config && ticket.status === 'backlog' && !isDemoMode()) {
-      transitionTicket(config, ticket.key, 'In Progress').catch(() => {})
+    // Auto-transition ticket to "In Progress" (skip in demo mode)
+    if (connection && provider && ticket.status === 'backlog' && !isDemoMode()) {
+      provider.transitionTicket(connection, ticket.key, 'In Progress').catch(() => {})
     }
     // In demo mode, update local state to show the transition
     if (isDemoMode() && ticket.status === 'backlog') {
       setTickets(prev => prev.map(t =>
-        t.key === ticket.key ? { ...t, status: 'in_progress' as const, jiraStatus: 'In Progress' } : t
+        t.key === ticket.key ? { ...t, status: 'in_progress' as const, providerStatus: 'In Progress' } : t
       ));
     }
   }
@@ -446,7 +461,7 @@ export default function JiraBoardTab({
     }
 
     const claudeSettings = useConfigStore.getState().config.aiCli.claudeCode
-    const skillArgs = `/conductor-jira-start-work ${ticket.key} ${projectKey} ${config?.domain ?? ''}`
+    const skillArgs = `/conductor-start-work ${ticket.key} ${projectKey} ${connection?.providerType ?? ''} ${getDomain(connection)}`
     const escaped = skillArgs.replace(/'/g, "'\\''")
     const command = buildClaudeCommand(`claude '${escaped}'\n`, claudeSettings);
 
@@ -457,13 +472,13 @@ export default function JiraBoardTab({
 
     setStartingTickets(prev => { const next = new Set(prev); next.delete(ticket.key); return next });
     setTimeout(reconcileSessions, 1500);
-    // Auto-transition ticket to "In Progress" in Jira (skip in demo mode)
-    if (config && ticket.status === 'backlog' && !isDemoMode()) {
-      transitionTicket(config, ticket.key, 'In Progress').catch(() => {})
+    // Auto-transition ticket to "In Progress" (skip in demo mode)
+    if (connection && provider && ticket.status === 'backlog' && !isDemoMode()) {
+      provider.transitionTicket(connection, ticket.key, 'In Progress').catch(() => {})
     }
     if (isDemoMode() && ticket.status === 'backlog') {
       setTickets(prev => prev.map(t =>
-        t.key === ticket.key ? { ...t, status: 'in_progress' as const, jiraStatus: 'In Progress' } : t
+        t.key === ticket.key ? { ...t, status: 'in_progress' as const, providerStatus: 'In Progress' } : t
       ));
     }
   }
@@ -517,10 +532,10 @@ export default function JiraBoardTab({
   }
 
   async function handleSaveEdit(issueKey: string, params: UpdateTicketParams) {
-    if (!config) return;
+    if (!connection || !provider) return;
     try {
       if (!isDemoMode()) {
-        await updateTicket(config, issueKey, params);
+        await provider.updateTicket(connection, issueKey, params);
       }
       // Optimistically update local state so the card reflects changes immediately
       setTickets(prev => prev.map(t => {
@@ -531,7 +546,7 @@ export default function JiraBoardTab({
           priority: params.priority ?? t.priority,
         };
       }));
-      // Refresh from Jira to get canonical data
+      // Refresh from provider to get canonical data
       if (!isDemoMode()) loadData(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update ticket');
@@ -546,9 +561,9 @@ export default function JiraBoardTab({
   }
 
   async function handleInlineCreate(status: TicketStatus, epicKey: string | null, summary: string) {
-    if (!config) return
+    if (!connection || !provider) return
     try {
-      await createJiraTicket(config, {
+      await provider.createTicket(connection, {
         projectKey,
         summary,
         description: '',
@@ -562,7 +577,7 @@ export default function JiraBoardTab({
   }
 
   async function handleCreateTicket(description: string) {
-    if (!config) return;
+    if (!connection || !provider) return;
 
     const { status, epicKey } = createDialog;
     const tempId = `pending-${Date.now()}`;
@@ -585,8 +600,8 @@ export default function JiraBoardTab({
         throw new Error(generated.error || "Claude failed to generate ticket");
       }
 
-      // Create the ticket in Jira
-      const newTicket = await createJiraTicket(config, {
+      // Create the ticket via the provider
+      const newTicket = await provider.createTicket(connection, {
         projectKey,
         summary: generated.summary!,
         description: generated.description!,
@@ -615,10 +630,10 @@ export default function JiraBoardTab({
       )
     : tickets;
 
-  if (!config && !isDemoMode()) {
+  if (!connection && !isDemoMode()) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-        Jira not configured. Open the Jira sidebar to connect.
+        No provider configured. Open the Kanban sidebar to connect.
       </div>
     );
   }
@@ -706,8 +721,8 @@ export default function JiraBoardTab({
       <KanbanBoard
         tickets={filteredTickets}
         epics={epics}
-        config={config}
-        jiraBaseUrl={jiraBaseUrl}
+        connection={connection!}
+        provider={provider!}
         pendingTickets={pendingTickets}
         startingTickets={startingTickets}
         sessionThinking={sessionThinking}

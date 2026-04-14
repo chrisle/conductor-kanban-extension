@@ -95,6 +95,12 @@ declare module '@conductor/extension-api' {
     ClaudeIcon: ComponentType<any>
     SidebarLayout: ComponentType<any>
     VisuallyHidden: ComponentType<any>
+    Tooltip: ComponentType<any>
+    TooltipContent: ComponentType<any>
+    TooltipProvider: ComponentType<any>
+    TooltipTrigger: ComponentType<any>
+    Separator: ComponentType<any>
+    ScrollArea: ComponentType<any>
   }
 
   // ── Utilities ───────────────────────────────────────────────────────────

@@ -36,7 +36,7 @@ export function CreateTicketDialog({ open, onOpenChange, columnTitle, onSubmit }
         <DialogHeader>
           <DialogTitle className="text-zinc-200">New ticket — {columnTitle}</DialogTitle>
           <DialogDescription className="text-zinc-500">
-            Describe what you need. Claude will generate a properly formatted Jira ticket.
+            Describe what you need. Claude will generate a properly formatted ticket.
           </DialogDescription>
         </DialogHeader>
 

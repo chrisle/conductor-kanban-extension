@@ -1,6 +1,6 @@
 {
-  "id": "jira",
-  "name": "Jira",
-  "version": "0.1.2",
+  "id": "kanban",
+  "name": "Kanban",
+  "version": "2.0.0",
   "main": "index.js"
 }
