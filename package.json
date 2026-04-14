@@ -1,0 +1,25 @@
+{
+  "name": "@np3/jira",
+  "version": "0.1.2",
+  "description": "Jira extension for Conductor",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  },
+  "peerDependencies": {
+    "lucide-react": ">=0.400.0",
+    "react": "^18.0.0"
+  },
+  "dependencies": {
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  }
+}
