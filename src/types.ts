@@ -1,4 +1,4 @@
-export type ProviderType = 'jira' | 'gitea'
+export type ProviderType = 'jira' | 'gitea' | 'azure-devops'
 
 export type TicketStatus = 'backlog' | 'in_progress' | 'done'
 
@@ -73,4 +73,10 @@ export interface GiteaConnection extends ProviderConnectionBase {
   ownerFilter?: string
 }
 
-export type ProviderConnection = JiraConnection | GiteaConnection
+export interface AzureDevOpsConnection extends ProviderConnectionBase {
+  providerType: 'azure-devops'
+  orgUrl: string
+  pat: string
+}
+
+export type ProviderConnection = JiraConnection | GiteaConnection | AzureDevOpsConnection

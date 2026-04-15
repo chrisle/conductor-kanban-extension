@@ -20,6 +20,7 @@ import type {
   ProviderConnection,
   JiraConnection,
   GiteaConnection,
+  AzureDevOpsConnection,
   Project,
 } from "./types";
 import { providerRegistry } from "./providers/provider";
@@ -44,6 +45,9 @@ function ConfigForm({ onSave }: { onSave: (conn: ProviderConnection) => void }) 
   const [giteaUrl, setGiteaUrl] = useState("");
   const [giteaToken, setGiteaToken] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("");
+  // Azure DevOps fields
+  const [azureOrgUrl, setAzureOrgUrl] = useState("");
+  const [azurePat, setAzurePat] = useState("");
 
   const [error, setError] = useState("");
   const [testing, setTesting] = useState(false);
@@ -73,6 +77,21 @@ function ConfigForm({ onSave }: { onSave: (conn: ProviderConnection) => void }) 
           email: em,
           apiToken: tok,
         } satisfies JiraConnection;
+      } else if (providerType === "azure-devops") {
+        const url = azureOrgUrl.trim().replace(/\/+$/, "");
+        const pat = azurePat.trim();
+        if (!url || !pat) {
+          setError("Organization URL and PAT are required");
+          setTesting(false);
+          return;
+        }
+        connection = {
+          id: crypto.randomUUID(),
+          name: url.replace(/^https?:\/\//, ""),
+          providerType: "azure-devops",
+          orgUrl: url,
+          pat,
+        } satisfies AzureDevOpsConnection;
       } else {
         const url = giteaUrl.trim();
         const tok = giteaToken.trim();
@@ -119,6 +138,7 @@ function ConfigForm({ onSave }: { onSave: (conn: ProviderConnection) => void }) 
         >
           <option value="jira">Jira</option>
           <option value="gitea">Gitea</option>
+          <option value="azure-devops">Azure DevOps</option>
         </select>
       </div>
 
@@ -142,6 +162,22 @@ function ConfigForm({ onSave }: { onSave: (conn: ProviderConnection) => void }) 
             placeholder="API Token"
             value={apiToken}
             onChange={(e) => setApiToken(e.target.value)}
+          />
+        </>
+      ) : providerType === "azure-devops" ? (
+        <>
+          <input
+            className={inputClass}
+            placeholder="Organization URL (e.g. https://dev.azure.com/myorg)"
+            value={azureOrgUrl}
+            onChange={(e) => setAzureOrgUrl(e.target.value)}
+          />
+          <input
+            type="password"
+            className={inputClass}
+            placeholder="Personal Access Token"
+            value={azurePat}
+            onChange={(e) => setAzurePat(e.target.value)}
           />
         </>
       ) : (
@@ -183,6 +219,15 @@ function ConfigForm({ onSave }: { onSave: (conn: ProviderConnection) => void }) 
           <span className="text-zinc-400">
             id.atlassian.com/manage-profile/security/api-tokens
           </span>
+        </div>
+      )}
+      {providerType === "azure-devops" && (
+        <div className="text-[10px] text-zinc-500 leading-relaxed">
+          Create a PAT at{" "}
+          <span className="text-zinc-400">
+            dev.azure.com/{"<org>"}/_usersSettings/tokens
+          </span>{" "}
+          with Work Items (Read & Write) scope
         </div>
       )}
     </form>
@@ -290,6 +335,11 @@ export default function Sidebar({
         email: connection.email,
         apiToken: connection.apiToken,
       });
+    } else if (connection.providerType === "azure-devops") {
+      setSettingsForm({
+        orgUrl: connection.orgUrl,
+        pat: connection.pat,
+      });
     } else {
       setSettingsForm({
         baseUrl: connection.baseUrl,
@@ -325,6 +375,20 @@ export default function Sidebar({
           email: em,
           apiToken: tok,
           name: d,
+        };
+      } else if (connection.providerType === "azure-devops") {
+        const url = (settingsForm.orgUrl || "").trim().replace(/\/+$/, "");
+        const pat = (settingsForm.pat || "").trim();
+        if (!url || !pat) {
+          setSettingsError("Organization URL and PAT are required");
+          setSettingsTesting(false);
+          return;
+        }
+        newConnection = {
+          ...connection,
+          orgUrl: url,
+          pat,
+          name: url.replace(/^https?:\/\//, ""),
         };
       } else {
         const url = (settingsForm.baseUrl || "").trim();
@@ -426,6 +490,9 @@ export default function Sidebar({
     if (!connection) return "";
     if (connection.providerType === "jira") {
       return connection.domain.replace(/\.atlassian\.net$/, "") + ".atlassian.net";
+    }
+    if (connection.providerType === "azure-devops") {
+      return connection.orgUrl.replace(/^https?:\/\//, "");
     }
     return connection.baseUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
   }
@@ -633,6 +700,42 @@ export default function Sidebar({
                       setSettingsForm((f) => ({
                         ...f,
                         apiToken: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </>
+            ) : connection?.providerType === "azure-devops" ? (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-zinc-400 font-medium">
+                    Organization URL
+                  </label>
+                  <input
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500 placeholder-zinc-500"
+                    placeholder="e.g. https://dev.azure.com/myorg"
+                    value={settingsForm.orgUrl || ""}
+                    onChange={(e) =>
+                      setSettingsForm((f) => ({
+                        ...f,
+                        orgUrl: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-zinc-400 font-medium">
+                    Personal Access Token
+                  </label>
+                  <input
+                    type="password"
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500 placeholder-zinc-500"
+                    placeholder="PAT"
+                    value={settingsForm.pat || ""}
+                    onChange={(e) =>
+                      setSettingsForm((f) => ({
+                        ...f,
+                        pat: e.target.value,
                       }))
                     }
                   />

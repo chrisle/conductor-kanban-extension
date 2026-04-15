@@ -8,6 +8,7 @@ import startWorkSkill from './skills/start-work/SKILL.md'
 // Register providers
 import './providers/jira/jira-provider'
 import './providers/gitea/gitea-provider'
+import './providers/azure-devops/azure-devops-provider'
 
 const kanbanExtension: Extension = {
   id: 'kanban',
@@ -36,4 +37,5 @@ export { providerRegistry } from './providers/provider'
 export type {
   Ticket, Epic, PullRequest, TicketStatus, UpdateTicketParams,
   CreateTicketParams, Project, ProviderConnection, ProviderType,
+  AzureDevOpsConnection,
 } from './types'
