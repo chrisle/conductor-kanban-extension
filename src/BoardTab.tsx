@@ -17,8 +17,6 @@ import { useSessionThinking } from "./useSessionThinking";
 
 const { Button } = ui;
 
-// Demo mode (provider-agnostic wrapper)
-import { isDemoMode, loadDemoBoardData, DEMO_CONFIG } from "./demo";
 
 // Persistent cache so the board renders instantly on app restart (file-based via IPC)
 let _boardCachePromise: Map<string, Promise<{ tickets: Ticket[]; epics: Epic[] } | null>> = new Map()
@@ -51,7 +49,7 @@ export default function BoardTab({
   const projectKey = tab.content || tab.title?.replace(/ Board$/, "").replace(/ Kanban Board$/, "") || "";
   const boardName = tab.title || `${projectKey} Kanban Board`;
   const [connection, setConnection] = useState<ProviderConnection | null>(() =>
-    isDemoMode() ? DEMO_CONFIG : useConfigStore.getState().getActiveConnection()
+    useConfigStore.getState().getActiveConnection()
   );
 
   const provider: Provider | null = connection ? providerRegistry.getForConnection(connection) : null;
@@ -60,7 +58,7 @@ export default function BoardTab({
   const configReady = useConfigStore(s => s.ready);
   useEffect(() => {
     if (configReady && !connection) {
-      setConnection(isDemoMode() ? DEMO_CONFIG : useConfigStore.getState().getActiveConnection());
+      setConnection(useConfigStore.getState().getActiveConnection());
     }
   }, [configReady]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -123,14 +121,6 @@ export default function BoardTab({
   const loadData = useCallback(async (silent = false): Promise<boolean> => {
     if (!projectKey) return false;
 
-    // Demo mode: load from external data files
-    if (isDemoMode()) {
-      const demo = await loadDemoBoardData();
-      setTickets(demo.tickets);
-      setEpics(demo.epics);
-      return true;
-    }
-
     if (!connection || !provider) return false;
 
     if (!silent) setLoading(true);
@@ -192,10 +182,6 @@ export default function BoardTab({
   const cacheAppliedRef = useRef(false);
   useEffect(() => {
     if (!projectKey) return;
-    if (isDemoMode()) {
-      loadData();
-      return;
-    }
     if (!connection) return;
     // Show cache instantly, but only before the first fresh fetch completes
     if (!cacheAppliedRef.current) {
@@ -292,7 +278,7 @@ export default function BoardTab({
             ticketKey: ticket.key,
             providerConnectionId: '',
             worktree,
-            tmuxSessionId: tmuxSessionName(ticket.key),
+            sessionId: tmuxSessionName(ticket.key),
             claudeSessionId: null,
             prUrl: null,
             status: 'active',
@@ -314,7 +300,7 @@ export default function BoardTab({
             ticketKey: ticket.key,
             providerConnectionId: '',
             worktree,
-            tmuxSessionId: tmuxSessionName(ticket.key),
+            sessionId: tmuxSessionName(ticket.key),
             claudeSessionId: null,
             prUrl: null,
             status: 'active',
@@ -424,15 +410,9 @@ export default function BoardTab({
 
     setStartingTickets(prev => { const next = new Set(prev); next.delete(ticket.key); return next });
     setTimeout(reconcileSessions, 1500);
-    // Auto-transition ticket to "In Progress" (skip in demo mode)
-    if (connection && provider && ticket.status === 'backlog' && !isDemoMode()) {
+    // Auto-transition ticket to "In Progress"
+    if (connection && provider && ticket.status === 'backlog') {
       provider.transitionTicket(connection, ticket.key, 'In Progress').catch(() => {})
-    }
-    // In demo mode, update local state to show the transition
-    if (isDemoMode() && ticket.status === 'backlog') {
-      setTickets(prev => prev.map(t =>
-        t.key === ticket.key ? { ...t, status: 'in_progress' as const, providerStatus: 'In Progress' } : t
-      ));
     }
   }
 
@@ -472,14 +452,9 @@ export default function BoardTab({
 
     setStartingTickets(prev => { const next = new Set(prev); next.delete(ticket.key); return next });
     setTimeout(reconcileSessions, 1500);
-    // Auto-transition ticket to "In Progress" (skip in demo mode)
-    if (connection && provider && ticket.status === 'backlog' && !isDemoMode()) {
+    // Auto-transition ticket to "In Progress"
+    if (connection && provider && ticket.status === 'backlog') {
       provider.transitionTicket(connection, ticket.key, 'In Progress').catch(() => {})
-    }
-    if (isDemoMode() && ticket.status === 'backlog') {
-      setTickets(prev => prev.map(t =>
-        t.key === ticket.key ? { ...t, status: 'in_progress' as const, providerStatus: 'In Progress' } : t
-      ));
     }
   }
 
@@ -534,9 +509,7 @@ export default function BoardTab({
   async function handleSaveEdit(issueKey: string, params: UpdateTicketParams) {
     if (!connection || !provider) return;
     try {
-      if (!isDemoMode()) {
-        await provider.updateTicket(connection, issueKey, params);
-      }
+      await provider.updateTicket(connection, issueKey, params);
       // Optimistically update local state so the card reflects changes immediately
       setTickets(prev => prev.map(t => {
         if (t.key !== issueKey) return t;
@@ -547,7 +520,7 @@ export default function BoardTab({
         };
       }));
       // Refresh from provider to get canonical data
-      if (!isDemoMode()) loadData(true);
+      loadData(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update ticket');
     }
@@ -630,7 +603,7 @@ export default function BoardTab({
       )
     : tickets;
 
-  if (!connection && !isDemoMode()) {
+  if (!connection) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-zinc-500">
         No provider configured. Open the Kanban sidebar to connect.

@@ -27,16 +27,6 @@ This skill is invoked with positional arguments:
 
 ## Instructions
 
-### Demo Mode
-
-If the domain argument is `demo.atlassian.net` or the `--demo-mode` flag is present, this is a **demo mode** invocation. In demo mode:
-
-1. Do NOT use the Atlassian MCP or make any API calls.
-2. Instead, read the ticket details from the file `~/.conductor/demo-data/demo-tickets.json`. This file is a JSON object keyed by ticket key (e.g. `"SD-19"`), where each entry contains `key`, `summary`, `status`, `issueType`, `priority`, `parentKey`, and `description`.
-3. Use the `description` field from the demo tickets file as the full ticket specification.
-4. Skip attachment downloading (demo tickets have no attachments).
-5. Proceed with implementation as normal using the ticket details from the file.
-
 ### Jira Mode (providerType = jira)
 
 1. Use the claude.ai Atlassian MCP (cloud ID 8fd881b3-a07f-4662-bad9-1a9d9e0321a3) to fetch the ticket from the project in the given domain.

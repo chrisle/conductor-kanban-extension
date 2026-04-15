@@ -6,7 +6,6 @@ import {
   LayoutGrid,
   Pin,
   Plus,
-  FlaskConical,
 } from "lucide-react";
 import {
   useTabsStore,
@@ -24,14 +23,6 @@ import type {
   Project,
 } from "./types";
 import { providerRegistry } from "./providers/provider";
-import {
-  isDemoMode,
-  enableDemoMode,
-  disableDemoMode,
-  DEMO_PROJECT_KEY,
-  DEMO_PROJECT_NAME,
-  DEMO_CONFIG,
-} from "./demo";
 
 const {
   Button, Skeleton, Dialog, DialogContent, DialogTitle, DialogFooter,
@@ -43,7 +34,7 @@ const {
 // Module-level cache so projects survive sidebar unmount/remount
 let cachedProjects: Project[] | null = null;
 
-function ConfigForm({ onSave, onDemo }: { onSave: (conn: ProviderConnection) => void; onDemo: () => void }) {
+function ConfigForm({ onSave }: { onSave: (conn: ProviderConnection) => void }) {
   const [providerType, setProviderType] = useState<ProviderType>("jira");
   // Jira fields
   const [domain, setDomain] = useState("");
@@ -194,19 +185,6 @@ function ConfigForm({ onSave, onDemo }: { onSave: (conn: ProviderConnection) => 
           </span>
         </div>
       )}
-
-      <div className="border-t border-zinc-700/40 pt-3">
-        <button
-          type="button"
-          onClick={onDemo}
-          className="w-full bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs rounded py-1.5 transition-colors"
-        >
-          Demo Mode
-        </button>
-        <div className="text-[10px] text-zinc-500 mt-1">
-          Try with sample data — no account needed
-        </div>
-      </div>
     </form>
   );
 }
@@ -219,7 +197,6 @@ export default function Sidebar({
   const [connection, setConnection] = useState<ProviderConnection | null>(() =>
     useConfigStore.getState().getActiveConnection(),
   );
-  const [demoActive, setDemoActive] = useState(isDemoMode);
   // Re-derive connection when the config store finishes loading (async IPC)
   const configReady = useConfigStore((s) => s.ready);
   useEffect(() => {
@@ -249,18 +226,6 @@ export default function Sidebar({
   const loadProjects = useCallback(
     async (force = false) => {
       if (!connection || !provider) return;
-      if (demoActive) {
-        const demoProjects: Project[] = [
-          {
-            id: "10135",
-            key: DEMO_PROJECT_KEY,
-            name: DEMO_PROJECT_NAME,
-          },
-        ];
-        cachedProjects = demoProjects;
-        setProjects(demoProjects);
-        return;
-      }
       if (!force && cachedProjects) return;
       setLoading(true);
       setError("");
@@ -399,28 +364,6 @@ export default function Sidebar({
   const providerProjectKeys = useProjectStore((s) => s.providerProjectKeys);
   const hasLinkedSpaces = providerProjectKeys.length > 0;
 
-  function handleEnterDemoMode() {
-    enableDemoMode();
-    setDemoActive(true);
-    setConnection(DEMO_CONFIG);
-    // Open the demo board immediately
-    const targetGroup = focusedGroupId || groupId;
-    addTab(targetGroup, {
-      type: "kanban-board",
-      title: `${DEMO_PROJECT_NAME} Kanban Board`,
-      content: DEMO_PROJECT_KEY,
-    });
-  }
-
-  function handleExitDemoMode() {
-    disableDemoMode();
-    setDemoActive(false);
-    cachedProjects = null;
-    setProjects([]);
-    const restored = useConfigStore.getState().getActiveConnection();
-    setConnection(restored);
-  }
-
   function handleLogout() {
     if (connection) {
       useConfigStore.getState().removeProviderConnection(connection.id);
@@ -431,23 +374,15 @@ export default function Sidebar({
     setSettingsOpen(false);
   }
 
-  const displayName = demoActive
-    ? `${provider?.displayName ?? "Kanban"} Demo`
-    : provider?.displayName ?? connection?.name ?? "Kanban";
+  const displayName = provider?.displayName ?? connection?.name ?? "Kanban";
 
-  if (!connection && !demoActive) {
+  if (!connection) {
     return (
       <SidebarLayout
         title="Kanban"
-        actions={[
-          {
-            icon: FlaskConical,
-            label: "Demo Mode",
-            onClick: handleEnterDemoMode,
-          },
-        ]}
+        actions={[]}
       >
-        <ConfigForm onSave={setConnection} onDemo={handleEnterDemoMode} />
+        <ConfigForm onSave={setConnection} />
       </SidebarLayout>
     );
   }
@@ -488,7 +423,7 @@ export default function Sidebar({
 
   // Domain / base URL display
   function connectionLabel(): string {
-    if (!connection || demoActive) return "";
+    if (!connection) return "";
     if (connection.providerType === "jira") {
       return connection.domain.replace(/\.atlassian\.net$/, "") + ".atlassian.net";
     }
@@ -500,34 +435,20 @@ export default function Sidebar({
       title={displayName}
       actions={[
         {
-          icon: FlaskConical,
-          label: demoActive ? "Exit Demo" : "Demo Mode",
-          onClick: demoActive ? handleExitDemoMode : handleEnterDemoMode,
-          className: demoActive
-            ? "text-amber-400 hover:text-amber-300"
-            : "text-zinc-400 hover:text-zinc-200",
+          icon: RefreshCw,
+          label: "Refresh",
+          onClick: () => loadProjects(true),
+          disabled: loading,
+          spinning: loading,
         },
-        ...(!demoActive
-          ? [
-              {
-                icon: RefreshCw,
-                label: "Refresh",
-                onClick: () => loadProjects(true),
-                disabled: loading,
-                spinning: loading,
-              },
-            ]
-          : []),
       ]}
-      onSettings={demoActive ? undefined : handleOpenSettings}
+      onSettings={handleOpenSettings}
       footer="v0.1.0"
     >
       {/* Connection info */}
-      {!demoActive && (
-        <div className="px-3 py-1.5 text-[11px] text-zinc-500 border-b border-zinc-700/40">
-          {connectionLabel()}
-        </div>
-      )}
+      <div className="px-3 py-1.5 text-[11px] text-zinc-500 border-b border-zinc-700/40">
+        {connectionLabel()}
+      </div>
 
       {/* Filter */}
       {projects.length > 5 && (
