@@ -72,12 +72,13 @@ const SORT_LABELS: Record<SortMode, string> = {
 }
 
 function getCompactColumns(): Set<string> {
-  const columns = useConfigStore.getState().config.ui.kanbanCompactColumns
+  const data = useConfigStore.getState().getExtensionData('kanban')
+  const columns = (data.compactColumns as string[] | undefined) ?? []
   return columns.length > 0 ? new Set(columns) : new Set(['done'])
 }
 
 function saveCompactColumns(set: Set<string>) {
-  useConfigStore.getState().setKanbanCompactColumns([...set])
+  useConfigStore.getState().setExtensionData('kanban', { compactColumns: [...set] })
 }
 
 export function KanbanColumn({ title, status, tickets, pendingTickets = [], startingTickets, connection, provider, sessionThinking, onOpenUrl, onNewSession, onContinueSession, onStartWork, onStartWorkInBackground, onEditTicket, onOpenInTerminal, onOpenInVSCode, onOpenInClaude, onRefresh, onCreateTicket, onInlineCreate, workSessions = [] }: KanbanColumnProps) {

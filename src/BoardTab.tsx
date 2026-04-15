@@ -66,8 +66,8 @@ export default function BoardTab({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
-  const hideDoneColumn = useConfigStore(s => s.config.ui.kanbanHideDoneColumn);
-  const setKanbanHideDoneColumn = useConfigStore(s => s.setKanbanHideDoneColumn);
+  const hideDoneColumn = useConfigStore(s => (s.getExtensionData('kanban').hideDoneColumn as boolean | undefined) ?? false);
+  const setHideDoneColumn = (hide: boolean) => useConfigStore.getState().setExtensionData('kanban', { hideDoneColumn: hide });
   const workSessions = useWorkSessionsStore(s => s.sessions);
   const activeSessionNames = workSessions
     .filter(ws => ws.status === 'active' && ws.tmuxSessionId)
@@ -648,7 +648,7 @@ export default function BoardTab({
 
           {/* Toggle done column visibility */}
           <button
-            onClick={() => setKanbanHideDoneColumn(!hideDoneColumn)}
+            onClick={() => setHideDoneColumn(!hideDoneColumn)}
             className={`flex items-center gap-1 h-7 rounded-md px-2 text-[11px] transition-colors ${
               hideDoneColumn
                 ? 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-700'
