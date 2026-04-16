@@ -1,0 +1,72 @@
+# Triggered on every push to main.
+#
+# The deploy skill bumps the version in package.json + manifest.json
+# locally before pushing, so this workflow only builds and publishes.
+#
+# 1. Builds the extension bundle.
+# 2. Zips dist/ into kanban-extension.zip.
+# 3. Creates a GitHub Release tagged v<version> with the zip attached.
+#    Conductor's "install from URL" feature can fetch the asset directly.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Resolve version
+        id: ver
+        run: echo "version=$(node -p "require('./manifest.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if tag already exists
+        id: check
+        run: |
+          if git ls-remote --tags origin "refs/tags/v${{ steps.ver.outputs.version }}" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install
+        if: steps.check.outputs.exists == 'false'
+        run: npm ci
+
+      - name: Typecheck
+        if: steps.check.outputs.exists == 'false'
+        run: npm run typecheck
+
+      - name: Build
+        if: steps.check.outputs.exists == 'false'
+        run: npm run build
+
+      - name: Package extension
+        if: steps.check.outputs.exists == 'false'
+        run: cd dist && zip -r ../kanban-extension.zip .
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ steps.ver.outputs.version }}" \
+            --title "v${{ steps.ver.outputs.version }}" \
+            --notes-file CHANGELOG.md \
+            kanban-extension.zip
