@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTabsStore, getThinkingState, stripAnsi, type ThinkingState } from '@conductor/extension-api'
 
 export function useSessionThinking(sessions: string[]): Record<string, ThinkingState> {
-  const groups = useTabsStore(s => s.groups)
+  const groups: Record<string, any> = useTabsStore(s => s.groups)
   const [bgThinking, setBgThinking] = useState<Record<string, ThinkingState>>({})
 
   // Track which sessions currently have an open tab

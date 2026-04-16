@@ -347,7 +347,9 @@ export const TicketCard = memo(function TicketCard({
               <span className="flex-1" />
 
               {isStarting && (
-                <Loader2 className="w-3 h-3 text-blue-400 animate-spin shrink-0" title="Starting session..." />
+                <span title="Starting session..." className="shrink-0 flex">
+                  <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
+                </span>
               )}
 
               {!isStarting && sessionActive && (

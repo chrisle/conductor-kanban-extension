@@ -391,7 +391,7 @@ export default function BoardTab({
       useTabsStore.getState().setActiveTab(targetGroup, tmuxName);
     } else {
       // Remove from other groups if it exists there
-      const allGroups = useTabsStore.getState().groups;
+      const allGroups: Record<string, any> = useTabsStore.getState().groups;
       for (const [gid, group] of Object.entries(allGroups)) {
         if (gid !== targetGroup && group.tabs.find(t => t.id === tmuxName)) {
           useTabsStore.getState().removeTab(gid, tmuxName);

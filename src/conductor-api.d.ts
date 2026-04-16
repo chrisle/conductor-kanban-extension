@@ -54,15 +54,22 @@ declare module '@conductor/extension-sdk' {
 }
 
 declare module '@conductor/extension-api' {
-  import type { ComponentType, FC, ReactNode } from 'react'
+  import type { ComponentType } from 'react'
 
   // ── Stores ──────────────────────────────────────────────────────────────
-  export const useTabsStore: any
-  export const useLayoutStore: any
-  export const useSidebarStore: any
-  export const useConfigStore: any
-  export const useProjectStore: any
-  export const useWorkSessionsStore: any
+  // Zustand-like hook: selector-based call, plus getState/subscribe/setState.
+  interface StoreHook {
+    (selector?: (state: any) => any): any
+    getState(): any
+    setState(partial: any, replace?: boolean): void
+    subscribe(listener: (state: any, prev: any) => void): () => void
+  }
+  export const useTabsStore: StoreHook
+  export const useLayoutStore: StoreHook
+  export const useSidebarStore: StoreHook
+  export const useConfigStore: StoreHook
+  export const useProjectStore: StoreHook
+  export const useWorkSessionsStore: StoreHook
 
   // ── UI Components ───────────────────────────────────────────────────────
   export const ui: {
@@ -126,4 +133,13 @@ declare module '@conductor/extension-api' {
 declare module '*.md' {
   const content: string
   export default content
+}
+
+// Host-provided APIs available on window at runtime.
+interface ConductorElectronAPI {
+  [key: string]: any
+}
+
+interface Window {
+  electronAPI: ConductorElectronAPI
 }
