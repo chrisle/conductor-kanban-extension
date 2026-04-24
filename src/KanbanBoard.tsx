@@ -49,7 +49,9 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ tickets, epics, connection, provider, pendingTickets = [], startingTickets, sessionThinking, hideDoneColumn = false, onOpenUrl, onNewSession, onContinueSession, onStartWork, onStartWorkInBackground, onEditTicket, onOpenInTerminal, onOpenInVSCode, onOpenInClaude, onRefresh, onCreateTicket, onInlineCreate, workSessions = [] }: KanbanBoardProps) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // Map of explicit user toggle choices per group key. Absence means follow the
+  // default rule (collapsed when the group has no backlog or in-progress tickets).
+  const [userChoice, setUserChoice] = useState<Map<string, boolean>>(new Map())
 
   // Filter out the done column when the user has chosen to hide it
   const visibleColumns = hideDoneColumn ? COLUMNS.filter(c => c.status !== 'done') : COLUMNS
@@ -57,11 +59,30 @@ export function KanbanBoard({ tickets, epics, connection, provider, pendingTicke
   const epicKeys = epics.map((e) => e.key)
   const ungroupedTickets = tickets.filter((t) => !t.epicKey || !epicKeys.includes(t.epicKey))
 
+  const isActiveStatus = (s: TicketStatus) => s === 'backlog' || s === 'in_progress'
+  const groupsWithActiveTickets = new Set<string>()
+  for (const t of tickets) {
+    if (!isActiveStatus(t.status)) continue
+    if (t.epicKey && epicKeys.includes(t.epicKey)) groupsWithActiveTickets.add(t.epicKey)
+    else groupsWithActiveTickets.add('__ungrouped')
+  }
+  for (const p of pendingTickets) {
+    if (!isActiveStatus(p.status)) continue
+    if (p.epicKey && epicKeys.includes(p.epicKey)) groupsWithActiveTickets.add(p.epicKey)
+    else groupsWithActiveTickets.add('__ungrouped')
+  }
+
+  const isCollapsed = (key: string): boolean => {
+    const explicit = userChoice.get(key)
+    if (explicit !== undefined) return explicit
+    return !groupsWithActiveTickets.has(key)
+  }
+
   const toggle = (key: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
+    const current = isCollapsed(key)
+    setUserChoice((prev) => {
+      const next = new Map(prev)
+      next.set(key, !current)
       return next
     })
   }
@@ -74,16 +95,16 @@ export function KanbanBoard({ tickets, epics, connection, provider, pendingTicke
         const epicTickets = tickets.filter((t) => t.epicKey === epic.key)
         if (epicTickets.length === 0 && !pendingTickets.some(p => p.epicKey === epic.key)) return null
 
-        const isCollapsed = collapsed.has(epic.key)
+        const epicCollapsed = isCollapsed(epic.key)
         const counts = visibleColumns.map((col) => epicTickets.filter((t) => t.status === col.status).length)
         const epicPending = pendingTickets.filter(p => p.epicKey === epic.key)
 
         return (
-          <Collapsible key={epic.key} open={!isCollapsed} onOpenChange={() => toggle(epic.key)} asChild>
+          <Collapsible key={epic.key} open={!epicCollapsed} onOpenChange={() => toggle(epic.key)} asChild>
             <section>
               {/* Swimlane header */}
               <CollapsibleTrigger className="mb-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-jira-raised/30 transition-colors">
-                {isCollapsed
+                {epicCollapsed
                   ? <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />
                   : <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
                 }
@@ -122,10 +143,10 @@ export function KanbanBoard({ tickets, epics, connection, provider, pendingTicke
       })}
 
       {(ungroupedTickets.length > 0 || pendingTickets.some(p => !p.epicKey)) && (
-        <Collapsible open={!collapsed.has('__ungrouped')} onOpenChange={() => toggle('__ungrouped')} asChild>
+        <Collapsible open={!isCollapsed('__ungrouped')} onOpenChange={() => toggle('__ungrouped')} asChild>
           <section>
             <CollapsibleTrigger className="mb-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-jira-raised/30 transition-colors">
-              {collapsed.has('__ungrouped')
+              {isCollapsed('__ungrouped')
                 ? <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />
                 : <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
               }
