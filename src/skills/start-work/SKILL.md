@@ -57,6 +57,9 @@ Steps:
 - If you need to test the application, run `make setup-worktree` to install dependencies before running tests.
 - Run the full test suite to make sure nothing is broken.
 - Only commit changes related to this ticket — keep the PR clean and focused.
+- Before committing, run these auto-formatters so the CI lint/format checks don't fail:
+  - `npx prettier --check "**/*.{ts,tsx,js,mjs,cjs,json,yml,yaml,md}" --write` (matches CI's `prettier --check`)
+  - `~/.local/bin/ruff check --fix services/ && ~/.local/bin/ruff format services/` (matches CI's `ruff format --check services/`)
 - When done, push your branch and open a PR (or update an existing one).
 - Update the PR description with a detailed summary of what you did, why, and how to verify.
 - Add clear inline comments in the code to explain non-obvious logic.
