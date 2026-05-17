@@ -21,6 +21,7 @@ import type {
   JiraConnection,
   GiteaConnection,
   AzureDevOpsConnection,
+  GitHubProjectsConnection,
   Project,
 } from "./types";
 import { providerRegistry } from "./providers/provider";
@@ -48,6 +49,9 @@ function ConfigForm({ onSave }: { onSave: (conn: ProviderConnection) => void }) 
   // Azure DevOps fields
   const [azureOrgUrl, setAzureOrgUrl] = useState("");
   const [azurePat, setAzurePat] = useState("");
+  // GitHub Projects fields
+  const [githubOwner, setGithubOwner] = useState("");
+  const [githubToken, setGithubToken] = useState("");
 
   const [error, setError] = useState("");
   const [testing, setTesting] = useState(false);
@@ -92,6 +96,21 @@ function ConfigForm({ onSave }: { onSave: (conn: ProviderConnection) => void }) 
           orgUrl: url,
           pat,
         } satisfies AzureDevOpsConnection;
+      } else if (providerType === "github-projects") {
+        const tok = githubToken.trim();
+        const owner = githubOwner.trim();
+        if (!tok) {
+          setError("Personal access token is required");
+          setTesting(false);
+          return;
+        }
+        connection = {
+          id: crypto.randomUUID(),
+          name: owner || "GitHub Projects",
+          providerType: "github-projects",
+          token: tok,
+          owner: owner || undefined,
+        } satisfies GitHubProjectsConnection;
       } else {
         const url = giteaUrl.trim();
         const tok = giteaToken.trim();
@@ -139,6 +158,7 @@ function ConfigForm({ onSave }: { onSave: (conn: ProviderConnection) => void }) 
           <option value="jira">Jira</option>
           <option value="gitea">Gitea</option>
           <option value="azure-devops">Azure DevOps</option>
+          <option value="github-projects">GitHub Projects</option>
         </select>
       </div>
 
@@ -178,6 +198,22 @@ function ConfigForm({ onSave }: { onSave: (conn: ProviderConnection) => void }) 
             placeholder="Personal Access Token"
             value={azurePat}
             onChange={(e) => setAzurePat(e.target.value)}
+          />
+        </>
+      ) : providerType === "github-projects" ? (
+        <>
+          <input
+            className={inputClass}
+            placeholder="Organization or user (optional)"
+            value={githubOwner}
+            onChange={(e) => setGithubOwner(e.target.value)}
+          />
+          <input
+            type="password"
+            className={inputClass}
+            placeholder="Personal Access Token"
+            value={githubToken}
+            onChange={(e) => setGithubToken(e.target.value)}
           />
         </>
       ) : (
@@ -228,6 +264,14 @@ function ConfigForm({ onSave }: { onSave: (conn: ProviderConnection) => void }) 
             dev.azure.com/{"<org>"}/_usersSettings/tokens
           </span>{" "}
           with Work Items (Read & Write) scope
+        </div>
+      )}
+      {providerType === "github-projects" && (
+        <div className="text-[10px] text-zinc-500 leading-relaxed">
+          Create a token at{" "}
+          <span className="text-zinc-400">github.com/settings/tokens</span>{" "}
+          with the <span className="text-zinc-400">project</span> and{" "}
+          <span className="text-zinc-400">repo</span> scopes
         </div>
       )}
     </form>
@@ -340,6 +384,11 @@ export default function Sidebar({
         orgUrl: connection.orgUrl,
         pat: connection.pat,
       });
+    } else if (connection.providerType === "github-projects") {
+      setSettingsForm({
+        owner: connection.owner || "",
+        token: connection.token,
+      });
     } else {
       setSettingsForm({
         baseUrl: connection.baseUrl,
@@ -389,6 +438,20 @@ export default function Sidebar({
           orgUrl: url,
           pat,
           name: url.replace(/^https?:\/\//, ""),
+        };
+      } else if (connection.providerType === "github-projects") {
+        const tok = (settingsForm.token || "").trim();
+        const owner = (settingsForm.owner || "").trim();
+        if (!tok) {
+          setSettingsError("Personal access token is required");
+          setSettingsTesting(false);
+          return;
+        }
+        newConnection = {
+          ...connection,
+          token: tok,
+          owner: owner || undefined,
+          name: owner || "GitHub Projects",
         };
       } else {
         const url = (settingsForm.baseUrl || "").trim();
@@ -493,6 +556,11 @@ export default function Sidebar({
     }
     if (connection.providerType === "azure-devops") {
       return connection.orgUrl.replace(/^https?:\/\//, "");
+    }
+    if (connection.providerType === "github-projects") {
+      return connection.owner
+        ? `github.com/${connection.owner}`
+        : "GitHub Projects";
     }
     return connection.baseUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
   }
@@ -736,6 +804,42 @@ export default function Sidebar({
                       setSettingsForm((f) => ({
                         ...f,
                         pat: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </>
+            ) : connection?.providerType === "github-projects" ? (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-zinc-400 font-medium">
+                    Organization or User
+                  </label>
+                  <input
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500 placeholder-zinc-500"
+                    placeholder="Optional — leave blank for your own projects"
+                    value={settingsForm.owner || ""}
+                    onChange={(e) =>
+                      setSettingsForm((f) => ({
+                        ...f,
+                        owner: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-zinc-400 font-medium">
+                    Personal Access Token
+                  </label>
+                  <input
+                    type="password"
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500 placeholder-zinc-500"
+                    placeholder="PAT"
+                    value={settingsForm.token || ""}
+                    onChange={(e) =>
+                      setSettingsForm((f) => ({
+                        ...f,
+                        token: e.target.value,
                       }))
                     }
                   />

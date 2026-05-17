@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-05-17
+
+### Added
+
+- GitHub Projects provider — connect a GitHub organization or personal account to browse GitHub Projects v2 boards and view, create, edit, move, and delete cards. Linked pull requests appear on issue cards.
+- The start-work skill can now pick up GitHub issues from a GitHub Projects board.
+
 ## [2.0.1] - 2026-04-15
 
 ### Changed

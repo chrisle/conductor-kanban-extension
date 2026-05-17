@@ -37,6 +37,7 @@ function getDomain(connection: ProviderConnection | null): string {
   if (!connection) return ''
   if (connection.providerType === 'jira') return connection.domain
   if (connection.providerType === 'gitea') return connection.baseUrl
+  if (connection.providerType === 'github-projects') return connection.owner ?? ''
   return ''
 }
 

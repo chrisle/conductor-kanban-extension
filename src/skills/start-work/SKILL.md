@@ -1,6 +1,6 @@
 ---
 name: conductor-start-work
-description: Work autonomously on a ticket end to end. Fetches ticket details, implements the work, writes tests, and opens a PR. Supports Jira and Gitea providers. Use when the user says "start work on <ticket>" or invokes /conductor-start-work with a ticket key.
+description: Work autonomously on a ticket end to end. Fetches ticket details, implements the work, writes tests, and opens a PR. Supports Jira, Gitea, and GitHub Projects providers. Use when the user says "start work on <ticket>" or invokes /conductor-start-work with a ticket key.
 ---
 
 # Start Work on Ticket
@@ -15,10 +15,10 @@ This skill is invoked with positional arguments:
 /conductor-start-work <ticketKey> <projectKey> <providerType> <domain>
 ```
 
-- `ticketKey` — the ticket key (e.g. SD-19 for Jira, owner/repo#42 for Gitea)
-- `projectKey` — the project key (e.g. SD for Jira, owner/repo for Gitea)
-- `providerType` — the provider type: `jira` or `gitea`
-- `domain` — the provider domain (e.g. triodeofficial.atlassian.net for Jira, gitea.example.com for Gitea)
+- `ticketKey` — the ticket key (e.g. SD-19 for Jira, owner/repo#42 for Gitea and GitHub Projects)
+- `projectKey` — the project key (e.g. SD for Jira, owner/repo for Gitea, the project node ID for GitHub Projects)
+- `providerType` — the provider type: `jira`, `gitea`, or `github-projects`
+- `domain` — the provider domain (e.g. triodeofficial.atlassian.net for Jira, gitea.example.com for Gitea, the org or user for GitHub Projects)
 
 ## Models
 
@@ -38,6 +38,15 @@ This skill is invoked with positional arguments:
 1. Read `~/Library/Application Support/conductor/config.json` and extract the Gitea connection matching the domain from the `providerConnections` array (filter by `providerType: 'gitea'`).
 2. Use the Gitea REST API to fetch the issue details: `curl -s -H "Authorization: token $TOKEN" "https://$DOMAIN/api/v1/repos/$PROJECT_KEY/issues/$ISSUE_NUMBER"` where `$ISSUE_NUMBER` is extracted from the ticket key (the number after `#`).
 3. Work autonomously on this ticket end to end.
+
+### GitHub Projects Mode (providerType = github-projects)
+
+1. Read `~/Library/Application Support/conductor/config.json` and extract the GitHub Projects connection from the `providerConnections` array (filter by `providerType: 'github-projects'`). If a domain was passed, match the connection whose `owner` equals it; otherwise use the first match. Use its `token` for all API calls.
+2. Fetch the ticket details:
+   - If the ticket key has the form `owner/repo#<number>` it is a real GitHub issue — fetch it with the REST API: `curl -s -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$OWNER/$REPO/issues/$NUMBER"`.
+   - Otherwise the key is an opaque project-item node ID for a draft issue — fetch its title and body with the GraphQL API: `POST https://api.github.com/graphql` with `query { node(id: "<ticketKey>") { ... on ProjectV2Item { content { ... on DraftIssue { title body } } } } }`.
+3. Work autonomously on this ticket end to end.
+4. When opening the PR for a real issue, prefix the title with `#<number>:` and reference the issue with a closing keyword (e.g. `Closes #<number>`) so it closes on merge. Draft issues cannot be linked to a PR — just describe the work in the PR description.
 
 ## Downloading Attachments (Jira only)
 
@@ -61,6 +70,7 @@ Steps:
   - `npx prettier --check "**/*.{ts,tsx,js,mjs,cjs,json,yml,yaml,md}" --write` (matches CI's `prettier --check`)
   - `~/.local/bin/ruff check --fix services/ && ~/.local/bin/ruff format services/` (matches CI's `ruff format --check services/`)
 - When done, push your branch and open a PR (or update an existing one).
+- Always include the ticket number in the PR. Put the ticket key at the start of the PR title (e.g. `SD-19: Add login redirect` for Jira, `#42: Add login redirect` for Gitea) and reference the ticket in the PR description (for Gitea, use a closing keyword like `Closes #42`). When updating an existing PR, make sure its title and description already include the ticket number — add it if missing.
 - Update the PR description with a detailed summary of what you did, why, and how to verify.
 - Add clear inline comments in the code to explain non-obvious logic.
 - Any time you create or update the PR, also add a comment to the ticket summarizing what changed and linking to the PR.

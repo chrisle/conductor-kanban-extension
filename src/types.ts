@@ -1,4 +1,4 @@
-export type ProviderType = 'jira' | 'gitea' | 'azure-devops'
+export type ProviderType = 'jira' | 'gitea' | 'azure-devops' | 'github-projects'
 
 export type TicketStatus = 'backlog' | 'in_progress' | 'done'
 
@@ -79,4 +79,18 @@ export interface AzureDevOpsConnection extends ProviderConnectionBase {
   pat: string
 }
 
-export type ProviderConnection = JiraConnection | GiteaConnection | AzureDevOpsConnection
+export interface GitHubProjectsConnection extends ProviderConnectionBase {
+  providerType: 'github-projects'
+  // GitHub personal access token (classic: `project` + `repo` scopes;
+  // fine-grained: Projects and Issues read/write).
+  token: string
+  // Optional organization or user login. When omitted, the projects owned by
+  // the authenticated user are listed.
+  owner?: string
+}
+
+export type ProviderConnection =
+  | JiraConnection
+  | GiteaConnection
+  | AzureDevOpsConnection
+  | GitHubProjectsConnection

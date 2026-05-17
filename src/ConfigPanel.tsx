@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Trash2, Eye, EyeOff, Plus } from 'lucide-react'
 import { useConfigStore, ui } from '@conductor/extension-api'
-import type { ProviderConnection, ProviderType, JiraConnection, GiteaConnection, AzureDevOpsConnection } from './types'
+import type { ProviderConnection, ProviderType, JiraConnection, GiteaConnection, AzureDevOpsConnection, GitHubProjectsConnection } from './types'
 import { providerRegistry } from './providers/provider'
 
 const { Button } = ui
@@ -10,11 +10,13 @@ const PROVIDER_OPTIONS: { value: ProviderType; label: string }[] = [
   { value: 'jira', label: 'Jira' },
   { value: 'gitea', label: 'Gitea' },
   { value: 'azure-devops', label: 'Azure DevOps' },
+  { value: 'github-projects', label: 'GitHub Projects' },
 ]
 
 type JiraFormState = { domain: string; email: string; apiToken: string }
 type GiteaFormState = { baseUrl: string; token: string; ownerFilter: string }
 type AzureFormState = { orgUrl: string; pat: string }
+type GitHubFormState = { owner: string; token: string }
 
 export default function ConfigPanel(): React.ReactElement {
   const connections = useConfigStore((s: any) => s.config.providerConnections) as ProviderConnection[]
@@ -28,6 +30,7 @@ export default function ConfigPanel(): React.ReactElement {
   const [jiraForm, setJiraForm] = useState<JiraFormState>({ domain: '', email: '', apiToken: '' })
   const [giteaForm, setGiteaForm] = useState<GiteaFormState>({ baseUrl: '', token: '', ownerFilter: '' })
   const [azureForm, setAzureForm] = useState<AzureFormState>({ orgUrl: '', pat: '' })
+  const [githubForm, setGithubForm] = useState<GitHubFormState>({ owner: '', token: '' })
   const [testing, setTesting] = useState(false)
   const [error, setError] = useState('')
   const [tokenVisible, setTokenVisible] = useState<Set<string>>(new Set())
@@ -39,6 +42,7 @@ export default function ConfigPanel(): React.ReactElement {
   const [editJiraForm, setEditJiraForm] = useState<JiraFormState>({ domain: '', email: '', apiToken: '' })
   const [editGiteaForm, setEditGiteaForm] = useState<GiteaFormState>({ baseUrl: '', token: '', ownerFilter: '' })
   const [editAzureForm, setEditAzureForm] = useState<AzureFormState>({ orgUrl: '', pat: '' })
+  const [editGithubForm, setEditGithubForm] = useState<GitHubFormState>({ owner: '', token: '' })
   const [editTesting, setEditTesting] = useState(false)
   const [editError, setEditError] = useState('')
 
@@ -75,6 +79,17 @@ export default function ConfigPanel(): React.ReactElement {
         providerType: 'azure-devops',
         orgUrl: url,
         pat,
+      }
+    } else if (providerType === 'github-projects') {
+      const token = githubForm.token.trim()
+      const owner = githubForm.owner.trim()
+      if (!token) return null
+      return {
+        id: 'github-' + (owner || 'viewer'),
+        name: owner || 'GitHub Projects',
+        providerType: 'github-projects',
+        token,
+        owner: owner || undefined,
       }
     } else {
       const baseUrl = giteaForm.baseUrl.trim().replace(/\/+$/, '')
@@ -117,6 +132,17 @@ export default function ConfigPanel(): React.ReactElement {
         orgUrl: url,
         pat,
       }
+    } else if (editProviderType === 'github-projects') {
+      const token = editGithubForm.token.trim()
+      const owner = editGithubForm.owner.trim()
+      if (!token) return null
+      return {
+        id: editingId!,
+        name: owner || 'GitHub Projects',
+        providerType: 'github-projects',
+        token,
+        owner: owner || undefined,
+      }
     } else {
       const baseUrl = editGiteaForm.baseUrl.trim().replace(/\/+$/, '')
       const token = editGiteaForm.token.trim()
@@ -149,6 +175,7 @@ export default function ConfigPanel(): React.ReactElement {
       setJiraForm({ domain: '', email: '', apiToken: '' })
       setGiteaForm({ baseUrl: '', token: '', ownerFilter: '' })
       setAzureForm({ orgUrl: '', pat: '' })
+      setGithubForm({ owner: '', token: '' })
       setShowForm(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection failed')
@@ -165,6 +192,8 @@ export default function ConfigPanel(): React.ReactElement {
       setEditJiraForm({ domain: conn.domain, email: conn.email, apiToken: conn.apiToken })
     } else if (conn.providerType === 'azure-devops') {
       setEditAzureForm({ orgUrl: conn.orgUrl, pat: conn.pat })
+    } else if (conn.providerType === 'github-projects') {
+      setEditGithubForm({ owner: conn.owner ?? '', token: conn.token })
     } else {
       setEditGiteaForm({ baseUrl: conn.baseUrl, token: conn.token, ownerFilter: conn.ownerFilter ?? '' })
     }
@@ -203,12 +232,16 @@ export default function ConfigPanel(): React.ReactElement {
     if (conn.providerType === 'azure-devops') {
       return conn.orgUrl.replace(/^https?:\/\//, '')
     }
+    if (conn.providerType === 'github-projects') {
+      return conn.owner || 'My GitHub projects'
+    }
     return conn.baseUrl
   }
 
   function connectionSubtext(conn: ProviderConnection): string {
     if (conn.providerType === 'jira') return conn.email
     if (conn.providerType === 'azure-devops') return ''
+    if (conn.providerType === 'github-projects') return ''
     return conn.ownerFilter ? `owner: ${conn.ownerFilter}` : ''
   }
 
@@ -221,6 +254,7 @@ export default function ConfigPanel(): React.ReactElement {
   function providerBadgeColor(type: ProviderType): string {
     if (type === 'jira') return 'bg-blue-900/50 text-blue-400'
     if (type === 'azure-devops') return 'bg-cyan-900/50 text-cyan-400'
+    if (type === 'github-projects') return 'bg-purple-900/50 text-purple-400'
     return 'bg-orange-900/50 text-orange-400'
   }
 
@@ -389,6 +423,55 @@ export default function ConfigPanel(): React.ReactElement {
     )
   }
 
+  function renderGitHubFields(
+    form: GitHubFormState,
+    setForm: React.Dispatch<React.SetStateAction<GitHubFormState>>,
+    isEdit: boolean,
+  ) {
+    return (
+      <>
+        <div className="space-y-1">
+          <label className="text-[11px] text-zinc-400 font-medium">Organization or User <span className="text-zinc-600">(optional)</span></label>
+          <input
+            className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500 placeholder-zinc-500"
+            placeholder="e.g. my-org — blank lists your own projects"
+            value={form.owner}
+            onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] text-zinc-400 font-medium">Personal Access Token</label>
+          {isEdit ? (
+            <input
+              type="password"
+              className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500 placeholder-zinc-500"
+              placeholder="Token"
+              value={form.token}
+              onChange={e => setForm(f => ({ ...f, token: e.target.value }))}
+            />
+          ) : (
+            <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5">
+              <input
+                type={newTokenVisible ? 'text' : 'password'}
+                className="flex-1 bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-500"
+                placeholder="Token"
+                value={form.token}
+                onChange={e => setForm(f => ({ ...f, token: e.target.value }))}
+              />
+              <button
+                type="button"
+                onClick={() => setNewTokenVisible(v => !v)}
+                className="text-zinc-500 hover:text-zinc-300 shrink-0"
+              >
+                {newTokenVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+              </button>
+            </div>
+          )}
+        </div>
+      </>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="text-ui-sm text-zinc-500 uppercase tracking-wider font-medium">
@@ -408,6 +491,8 @@ export default function ConfigPanel(): React.ReactElement {
                   ? renderJiraFields(editJiraForm, setEditJiraForm, true)
                   : editProviderType === 'azure-devops'
                   ? renderAzureFields(editAzureForm, setEditAzureForm, true)
+                  : editProviderType === 'github-projects'
+                  ? renderGitHubFields(editGithubForm, setEditGithubForm, true)
                   : renderGiteaFields(editGiteaForm, setEditGiteaForm, true)}
                 {editError && <div className="text-[11px] text-red-400">{editError}</div>}
               </div>
@@ -494,6 +579,8 @@ export default function ConfigPanel(): React.ReactElement {
             ? renderJiraFields(jiraForm, setJiraForm, false)
             : providerType === 'azure-devops'
             ? renderAzureFields(azureForm, setAzureForm, false)
+            : providerType === 'github-projects'
+            ? renderGitHubFields(githubForm, setGithubForm, false)
             : renderGiteaFields(giteaForm, setGiteaForm, false)}
           {error && <div className="text-[11px] text-red-400">{error}</div>}
           <div className="flex gap-2 justify-end">
@@ -523,6 +610,14 @@ export default function ConfigPanel(): React.ReactElement {
               Create a PAT at{' '}
               <span className="text-zinc-400">dev.azure.com/{'<org>'}/_usersSettings/tokens</span>{' '}
               with Work Items (Read & Write) scope
+            </div>
+          )}
+          {providerType === 'github-projects' && (
+            <div className="text-[10px] text-zinc-500 leading-relaxed">
+              Create a token at{' '}
+              <span className="text-zinc-400">github.com/settings/tokens</span>{' '}
+              with the <span className="text-zinc-400">project</span> and{' '}
+              <span className="text-zinc-400">repo</span> scopes
             </div>
           )}
         </form>

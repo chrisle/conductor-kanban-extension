@@ -1,6 +1,6 @@
 {
   "name": "@np3/jira",
-  "version": "2.0.3",
+  "version": "2.1.0",
   "description": "Jira extension for Conductor",
   "type": "module",
   "main": "./dist/index.js",
